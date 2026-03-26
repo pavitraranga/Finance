@@ -102,7 +102,7 @@ export default function Agents() {
                   </div>
                   
                   <div style={{ display: 'flex', gap: '1rem' }}>
-                    <button className="btn-secondary">Open</button>
+                    <button className="btn-secondary" onClick={() => navigate(`/agent/${agent.id}`)}>Open</button>
                     <button className="btn-danger" onClick={() => handleDeleteAgent(agent.id)}>Delete</button>
                   </div>
                 </div>

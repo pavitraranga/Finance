@@ -10,7 +10,7 @@ export default function Dashboard() {
 
   const navCards = [
     { title: 'Agents Management', description: 'Manage system agents, view stats, and config.', path: '/agents', icon: '🤖' },
-    { title: 'Profit List', description: 'View latest incoming profit streams and history.', path: '/dashboard', icon: '📈' },
+    { title: 'Profit List', description: 'View latest incoming profit streams and history.', path: '/profit', icon: '📈' },
     { title: 'Monthly Report', description: 'Analyze your monthly personal finance metrics.', path: '/dashboard', icon: '📅' }
   ];
 
