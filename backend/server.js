@@ -63,6 +63,13 @@ app.delete('/api/agents/:id', async (req, res) => {
   try {
     const { id } = req.params;
     await db.query('DELETE FROM agents WHERE id = ?', [id]);
+    
+    // Auto-increment reset feature (Useful for Dev mode)
+    const [rows] = await db.query('SELECT COUNT(*) as count FROM agents');
+    if (rows[0].count === 0) {
+      await db.query('ALTER TABLE agents AUTO_INCREMENT = 1');
+    }
+
     res.json({ message: 'Agent deleted' });
   } catch (err) {
     console.error(err);
@@ -270,6 +277,35 @@ app.get('/api/profit', async (req, res) => {
       },
       transactions
     });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/monthly-profit/:agentId', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    
+    const query = `
+      SELECT 
+        c.id as client_id,
+        c.name as client_name,
+        c.page_no,
+        c.created_at as issue_date,
+        c.principal_amount,
+        c.interest_rate,
+        MAX(ce.entry_date) as last_entry_date,
+        SUM(ce.paid_principal + ce.paid_interest + ce.adjustment) as total_paid
+      FROM clients c
+      LEFT JOIN client_entries ce ON c.id = ce.client_id
+      WHERE c.agent_id = ?
+      GROUP BY c.id
+      ORDER BY c.created_at DESC
+    `;
+    
+    const [clientsStats] = await db.query(query, [agentId]);
+    res.json(clientsStats);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });

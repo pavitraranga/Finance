@@ -5,13 +5,15 @@ import '../index.css';
 export default function Login() {
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
   const handleLogin = (e) => {
     e.preventDefault();
-    // Simulate login
-    if (loginId && password) {
+    if (loginId === 'girirajranga' && password === '9314443208') {
       navigate('/dashboard');
+    } else {
+      setError('Invalid Login ID or Password');
     }
   };
 
@@ -22,6 +24,8 @@ export default function Login() {
           <h2 style={{ fontSize: '2rem', marginBottom: '0.5rem', background: 'var(--accent-gradient)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Welcome Back</h2>
           <p style={{ color: 'var(--text-muted)' }}>Enter your credentials to continue</p>
         </div>
+
+        {error && <div style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '0.75rem', borderRadius: '8px', marginBottom: '1.5rem', textAlign: 'center', fontSize: '0.875rem' }}>{error}</div>}
 
         <form onSubmit={handleLogin}>
           <div className="input-group">
