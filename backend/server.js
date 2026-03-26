@@ -296,7 +296,7 @@ app.get('/api/monthly-profit/:agentId', async (req, res) => {
         c.principal_amount,
         c.interest_rate,
         MAX(ce.entry_date) as last_entry_date,
-        SUM(ce.paid_principal + ce.paid_interest + ce.adjustment) as total_paid
+        SUM(ce.paid_interest) as total_paid_interest
       FROM clients c
       LEFT JOIN client_entries ce ON c.id = ce.client_id
       WHERE c.agent_id = ?

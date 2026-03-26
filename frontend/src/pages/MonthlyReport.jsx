@@ -41,26 +41,33 @@ export default function MonthlyReport() {
           const principal = Number(client.principal_amount) || 0;
           const interestRate = Number(client.interest_rate) || 0;
           
-          // Total Months
+          // Total Months Calculation
           const issue = new Date(client.issue_date);
-          const now = new Date();
-          let months = (now.getFullYear() - issue.getFullYear()) * 12;
+          
+          // Use the furthest date to accomodate future-dated entries
+          const lastActive = client.last_entry_date ? new Date(client.last_entry_date) : null;
+          const today = new Date();
+          const endDate = (lastActive && lastActive > today) ? lastActive : today;
+
+          let months = (endDate.getFullYear() - issue.getFullYear()) * 12;
           months -= issue.getMonth();
-          months += now.getMonth();
+          months += endDate.getMonth();
+          
           // Minimum threshold is 1 month
           const totalMonths = months <= 0 ? 1 : months;
 
           const monthlyInterest = (principal * interestRate) / 100;
           const totalInterest = monthlyInterest * totalMonths;
-          const totalPaid = Number(client.total_paid) || 0;
-          const remainingBalance = totalInterest - totalPaid;
+          // Calculate using ONLY paid interest as requested
+          const totalPaidInterest = Number(client.total_paid_interest) || 0;
+          const remainingBalance = totalInterest - totalPaidInterest;
 
           return {
             ...client,
             total_months: totalMonths,
             monthly_interest: monthlyInterest,
             total_interest: totalInterest,
-            total_paid: totalPaid,
+            total_paid_interest: totalPaidInterest,
             remaining_balance: remainingBalance
           };
         });
@@ -93,7 +100,7 @@ export default function MonthlyReport() {
       [
         'Client Name', 'Page', 'Issue Date', 'Last Active', 
         'Principal', 'Interest Rate (%)', 'Monthly Interest', 
-        'Total Months', 'Total Interest', 'Total Paid', 'Pending Balance'
+        'Months Passed', 'Total Interest', 'Total Paid Interest', 'Pending Balance'
       ]
     ];
 
@@ -108,7 +115,7 @@ export default function MonthlyReport() {
         c.monthly_interest,
         c.total_months,
         c.total_interest,
-        c.total_paid,
+        c.total_paid_interest,
         c.remaining_balance
       ]);
     });
@@ -174,16 +181,17 @@ export default function MonthlyReport() {
                     <th style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.875rem', borderBottom: '1px solid var(--panel-border)' }}>Issue Date</th>
                     <th style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.875rem', borderBottom: '1px solid var(--panel-border)' }}>Last Active</th>
                     <th style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.875rem', borderBottom: '1px solid var(--panel-border)' }}>Principal / Rate</th>
+                    <th style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.875rem', borderBottom: '1px solid var(--panel-border)' }}>Months Passed</th>
                     <th style={{ padding: '1rem', color: 'var(--accent-1)', fontSize: '0.875rem', borderBottom: '1px solid var(--panel-border)' }}>Monthly Interest</th>
-                    <th style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.875rem', borderBottom: '1px solid var(--panel-border)' }}>Total Interest<br/><span style={{ fontSize: '10px', fontWeight: '400' }}>(Monthly Rate × Months)</span></th>
-                    <th style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.875rem', borderBottom: '1px solid var(--panel-border)' }}>Total Paid</th>
+                    <th style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.875rem', borderBottom: '1px solid var(--panel-border)' }}>Total Interest</th>
+                    <th style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.875rem', borderBottom: '1px solid var(--panel-border)' }}>Total Paid Int.</th>
                     <th style={{ padding: '1rem', color: 'var(--text-main)', fontSize: '0.875rem', borderBottom: '1px solid var(--panel-border)' }}>Pending Balance</th>
                   </tr>
                 </thead>
                 <tbody>
                   {clientData.length === 0 ? (
                     <tr>
-                      <td colSpan="8" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No clients mapped to this agent.</td>
+                      <td colSpan="9" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No clients mapped to this agent.</td>
                     </tr>
                   ) : (
                     clientData.map(c => (
@@ -198,12 +206,10 @@ export default function MonthlyReport() {
                           <div>₹{Number(c.principal_amount).toFixed(2) || '0.00'}</div>
                           <div style={{ fontSize: '0.8rem', color: 'var(--accent-2)' }}>{c.interest_rate}% per month</div>
                         </td>
+                        <td style={{ padding: '1rem', textAlign: 'center', fontWeight: '500' }}>{c.total_months}</td>
                         <td style={{ padding: '1rem', fontWeight: '600', color: 'var(--accent-1)' }}>₹{c.monthly_interest.toFixed(2)}</td>
-                        <td style={{ padding: '1rem' }}>
-                          <div>₹{c.total_interest.toFixed(2)}</div>
-                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{c.total_months} Months passed</div>
-                        </td>
-                        <td style={{ padding: '1rem', color: c.total_paid > 0 ? '#10b981' : 'inherit' }}>₹{c.total_paid.toFixed(2)}</td>
+                        <td style={{ padding: '1rem' }}>₹{c.total_interest.toFixed(2)}</td>
+                        <td style={{ padding: '1rem', color: c.total_paid_interest > 0 ? '#10b981' : 'inherit' }}>₹{c.total_paid_interest.toFixed(2)}</td>
                         {/* Highlighting high pending balances explicitly */}
                         <td style={{ padding: '1rem', fontWeight: '600', color: c.remaining_balance > (Number(c.principal_amount) * 2) ? '#ef4444' : '#f59e0b' }}>
                           ₹{c.remaining_balance.toFixed(2)}
