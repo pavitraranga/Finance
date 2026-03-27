@@ -11,6 +11,7 @@ export default function ClientDetails() {
   const [summary, setSummary] = useState(null);
   const [entries, setEntries] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingEntryId, setEditingEntryId] = useState(null);
 
   const [formData, setFormData] = useState({
     paid_principal: '',
@@ -39,23 +40,60 @@ export default function ClientDetails() {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      await api.post('/entries', {
-        client_id: id,
-        ...formData
-      });
-      setFormData({
-        paid_principal: '',
-        paid_interest: '',
-        adjustment: '',
-        payment_method: 'Cash',
-        entry_date: new Date().toISOString().split('T')[0]
-      });
+      if (editingEntryId) {
+        // Update existing entry
+        await api.put(`/entries/${editingEntryId}`, formData);
+      } else {
+        // Create new entry
+        await api.post('/entries', {
+          client_id: id,
+          ...formData
+        });
+      }
+      resetForm();
       fetchData();
     } catch (err) {
-      console.error('Failed to add entry', err);
-      alert('Failed to add entry');
+      console.error('Failed to save entry', err);
+      alert('Failed to save entry');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleEditClick = (entry) => {
+    setEditingEntryId(entry.id);
+    setFormData({
+      paid_principal: entry.paid_principal,
+      paid_interest: entry.paid_interest,
+      adjustment: entry.adjustment,
+      payment_method: entry.payment_method,
+      entry_date: new Date(entry.entry_date).toISOString().split('T')[0]
+    });
+    // Scroll to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const resetForm = () => {
+    setEditingEntryId(null);
+    setFormData({
+      paid_principal: '',
+      paid_interest: '',
+      adjustment: '',
+      payment_method: 'Cash',
+      entry_date: new Date().toISOString().split('T')[0]
+    });
+  };
+
+  const handleDeleteClick = async (entryId) => {
+    if (window.confirm("Are you sure you want to delete this transaction? This action cannot be undone.")) {
+      try {
+        await api.delete(`/entries/${entryId}`);
+        if (editingEntryId === entryId) resetForm();
+        fetchData();
+      } catch (err) {
+        console.error('Failed to delete entry', err);
+        alert('Failed to delete entry');
+      }
     }
   };
 
@@ -127,16 +165,14 @@ export default function ClientDetails() {
           <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Remaining Principal</p>
           <h2 style={{ fontSize: '2rem', color: summary.remainingPrincipal <= 0 ? '#10b981' : 'inherit' }}>₹{summary.remainingPrincipal}</h2>
         </div>
-        <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: `4px solid ${summary.remainingInterest <= 0 ? '#10b981' : '#f59e0b'}` }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Remaining Interest</p>
-          <h2 style={{ fontSize: '2rem', color: summary.remainingInterest <= 0 ? '#10b981' : 'inherit' }}>₹{summary.remainingInterest}</h2>
-        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(350px, 1fr) 2fr', gap: '2rem', alignItems: 'start' }}>
         {/* Entry Form */}
         <div className="glass-panel" style={{ position: 'sticky', top: '2rem' }}>
-          <h3 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--panel-border)' }}>Add New Entry</h3>
+          <h3 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--panel-border)' }}>
+            {editingEntryId ? 'Edit Transaction' : 'Add New Entry'}
+          </h3>
           <form onSubmit={handleAddEntry}>
             <div className="input-group">
               <label>Entry Date *</label>
@@ -198,8 +234,13 @@ export default function ClientDetails() {
             </div>
 
             <button type="submit" className="btn-primary" style={{ width: '100%', marginTop: '1rem' }} disabled={isSubmitting}>
-              {isSubmitting ? 'Processing...' : 'Add Entry'}
+              {isSubmitting ? 'Processing...' : (editingEntryId ? 'Update Transaction' : 'Add Entry')}
             </button>
+            {editingEntryId && (
+              <button type="button" className="btn-secondary" style={{ width: '100%', marginTop: '0.5rem', background: 'transparent', border: '1px solid var(--panel-border)' }} onClick={resetForm}>
+                Cancel Edit
+              </button>
+            )}
           </form>
         </div>
 
@@ -218,6 +259,7 @@ export default function ClientDetails() {
                   <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Interest</th>
                   <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Adjustment</th>
                   <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Method</th>
+                  <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -242,6 +284,14 @@ export default function ClientDetails() {
                         <span style={{ background: entry.payment_method === 'UPI' ? 'rgba(99, 102, 241, 0.2)' : 'rgba(16, 185, 129, 0.2)', color: entry.payment_method === 'UPI' ? 'var(--accent-1)' : '#10b981', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '500', textTransform: 'uppercase' }}>
                           {entry.payment_method}
                         </span>
+                      </td>
+                      <td style={{ padding: '1rem 1.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <button className="btn-secondary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }} onClick={() => handleEditClick(entry)}>
+                          Edit
+                        </button>
+                        <button type="button" style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={(e) => e.target.style.background = 'rgba(239, 68, 68, 0.2)'} onMouseLeave={(e) => e.target.style.background = 'rgba(239, 68, 68, 0.1)'} onClick={() => handleDeleteClick(entry.id)}>
+                          Delete
+                        </button>
                       </td>
                     </tr>
                   ))

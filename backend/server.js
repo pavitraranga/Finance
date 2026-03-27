@@ -175,6 +175,32 @@ app.post('/api/entries', async (req, res) => {
   }
 });
 
+app.put('/api/entries/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { entry_date, paid_principal, paid_interest, adjustment, payment_method } = req.body;
+    await db.query(
+      'UPDATE client_entries SET entry_date = ?, paid_principal = ?, paid_interest = ?, adjustment = ?, payment_method = ? WHERE id = ?',
+      [entry_date, paid_principal || 0, paid_interest || 0, adjustment || 0, payment_method, id]
+    );
+    res.json({ message: 'Entry updated successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/entries/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.query('DELETE FROM client_entries WHERE id = ?', [id]);
+    res.json({ message: 'Entry deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 app.get('/api/entries/:clientId', async (req, res) => {
   try {
     const { clientId } = req.params;
