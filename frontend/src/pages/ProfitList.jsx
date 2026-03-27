@@ -131,9 +131,48 @@ export default function ProfitList() {
             )}
 
             {filterType === 'month' && (
-              <div className="input-group" style={{ flex: 1, marginBottom: 0 }}>
-                <label style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Select Month</label>
-                <input type="month" value={month} onChange={e => setMonth(e.target.value)} />
+              <div style={{ display: 'flex', gap: '1rem', flex: 1 }}>
+                <div className="input-group" style={{ flex: 1, marginBottom: 0 }}>
+                  <label style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Select Month</label>
+                  <select 
+                    value={month ? month.split('-')[1] : ''} 
+                    onChange={e => {
+                      const y = month ? month.split('-')[0] : new Date().getFullYear();
+                      setMonth(`${y}-${e.target.value}`);
+                    }}
+                    style={{ background: 'rgba(0, 0, 0, 0.2)', border: '1px solid var(--panel-border)', borderRadius: '8px', padding: '0.875rem 1rem', color: 'var(--text-main)', width: '100%', fontFamily: 'var(--font-body)' }}
+                  >
+                    <option value="" disabled style={{ color: '#000' }}>Month</option>
+                    <option value="01" style={{ color: '#000' }}>January</option>
+                    <option value="02" style={{ color: '#000' }}>February</option>
+                    <option value="03" style={{ color: '#000' }}>March</option>
+                    <option value="04" style={{ color: '#000' }}>April</option>
+                    <option value="05" style={{ color: '#000' }}>May</option>
+                    <option value="06" style={{ color: '#000' }}>June</option>
+                    <option value="07" style={{ color: '#000' }}>July</option>
+                    <option value="08" style={{ color: '#000' }}>August</option>
+                    <option value="09" style={{ color: '#000' }}>September</option>
+                    <option value="10" style={{ color: '#000' }}>October</option>
+                    <option value="11" style={{ color: '#000' }}>November</option>
+                    <option value="12" style={{ color: '#000' }}>December</option>
+                  </select>
+                </div>
+                <div className="input-group" style={{ flex: 1, marginBottom: 0 }}>
+                  <label style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Select Year</label>
+                  <select 
+                    value={month ? month.split('-')[0] : ''} 
+                    onChange={e => {
+                      const m = month ? month.split('-')[1] : String(new Date().getMonth() + 1).padStart(2, '0');
+                      setMonth(`${e.target.value}-${m}`);
+                    }}
+                    style={{ background: 'rgba(0, 0, 0, 0.2)', border: '1px solid var(--panel-border)', borderRadius: '8px', padding: '0.875rem 1rem', color: 'var(--text-main)', width: '100%', fontFamily: 'var(--font-body)' }}
+                  >
+                    <option value="" disabled style={{ color: '#000' }}>Year</option>
+                    {Array.from({length: 10}, (_, i) => new Date().getFullYear() - 5 + i).map(year => (
+                      <option key={year} value={year} style={{ color: '#000' }}>{year}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             )}
             
