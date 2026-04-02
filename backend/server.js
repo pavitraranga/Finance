@@ -23,16 +23,23 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
+const getTable = (req, baseTable) => {
+  const type = req.headers['x-system-type'];
+  if (type === 'gold') return `gold_${baseTable}`;
+  if (type === 'emi') return `emi_${baseTable}`;
+  return baseTable;
+};
+
 // API Routes
 app.post('/api/agents', async (req, res) => {
   try {
     const { name } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
 
-    const [result] = await db.query('INSERT INTO agents (name) VALUES (?)', [name]);
+    const [result] = await db.query(`INSERT INTO ${getTable(req, 'agents')} (name) VALUES (?)`, [name]);
     
     // Fetch inserted agent to return
-    const [agents] = await db.query('SELECT * FROM agents WHERE id = ?', [result.insertId]);
+    const [agents] = await db.query(`SELECT * FROM ${getTable(req, 'agents')} WHERE id = ?`, [result.insertId]);
     res.status(201).json(agents[0]);
   } catch (err) {
     console.error(err);
@@ -43,11 +50,11 @@ app.post('/api/agents', async (req, res) => {
 app.get('/api/agents', async (req, res) => {
   try {
     const { search } = req.query;
-    let query = 'SELECT * FROM agents ORDER BY created_at DESC';
+    let query = `SELECT * FROM ${getTable(req, 'agents')} ORDER BY created_at DESC`;
     let params = [];
 
     if (search) {
-      query = 'SELECT * FROM agents WHERE name LIKE ? ORDER BY created_at DESC';
+      query = `SELECT * FROM ${getTable(req, 'agents')} WHERE name LIKE ? ORDER BY created_at DESC`;
       params = [`%${search}%`];
     }
 
@@ -62,12 +69,12 @@ app.get('/api/agents', async (req, res) => {
 app.delete('/api/agents/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    await db.query('DELETE FROM agents WHERE id = ?', [id]);
+    await db.query(`DELETE FROM ${getTable(req, 'agents')} WHERE id = ?`, [id]);
     
     // Auto-increment reset feature (Useful for Dev mode)
-    const [rows] = await db.query('SELECT COUNT(*) as count FROM agents');
+    const [rows] = await db.query(`SELECT COUNT(*) as count FROM ${getTable(req, 'agents')}`);
     if (rows[0].count === 0) {
-      await db.query('ALTER TABLE agents AUTO_INCREMENT = 1');
+      await db.query(`ALTER TABLE ${getTable(req, 'agents')} AUTO_INCREMENT = 1`);
     }
 
     res.json({ message: 'Agent deleted' });
@@ -81,19 +88,38 @@ app.delete('/api/agents/:id', async (req, res) => {
 app.post('/api/clients', upload.single('photo'), async (req, res) => {
   try {
     const { agent_id, name, phone, page_no, description, principal_amount, interest_rate } = req.body;
-    if (!agent_id || !name) return res.status(400).json({ error: 'Agent ID and Name are required' });
+    if (!name) return res.status(400).json({ error: 'Name is required' });
 
     const photo_path = req.file ? `/uploads/${req.file.filename}` : null;
     const pAmt = principal_amount || 0;
     const iRate = interest_rate || 0;
+    const isEmi = req.headers['x-system-type'] === 'emi';
 
-    const [result] = await db.query(
-      'INSERT INTO clients (agent_id, name, phone, page_no, description, principal_amount, interest_rate, photo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [agent_id, name, phone, page_no, description, pAmt, iRate, photo_path]
-    );
+    let query, params;
+    if (isEmi) {
+      const { tenure_months } = req.body;
+      query = `INSERT INTO ${getTable(req, 'clients')} (agent_id, name, phone, page_no, description, principal_amount, interest_rate, tenure_months, photo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+      params = [agent_id || null, name, phone, page_no, description, pAmt, iRate, tenure_months || 1, photo_path];
+    } else {
+      query = `INSERT INTO ${getTable(req, 'clients')} (agent_id, name, phone, page_no, description, principal_amount, interest_rate, photo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+      params = [agent_id || null, name, phone, page_no, description, pAmt, iRate, photo_path];
+    }
 
-    const [clients] = await db.query('SELECT * FROM clients WHERE id = ?', [result.insertId]);
+    const [result] = await db.query(query, params);
+
+    const [clients] = await db.query(`SELECT * FROM ${getTable(req, 'clients')} WHERE id = ?`, [result.insertId]);
     res.status(201).json(clients[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/all-clients', async (req, res) => {
+  try {
+    let query = `SELECT * FROM ${getTable(req, 'clients')} ORDER BY created_at DESC`;
+    const [clients] = await db.query(query);
+    res.json(clients);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -104,11 +130,11 @@ app.get('/api/clients/:agentId', async (req, res) => {
   try {
     const { agentId } = req.params;
     const { search } = req.query;
-    let query = 'SELECT * FROM clients WHERE agent_id = ? ORDER BY created_at DESC';
+    let query = `SELECT * FROM ${getTable(req, 'clients')} WHERE agent_id = ? ORDER BY created_at DESC`;
     let params = [agentId];
 
     if (search) {
-      query = 'SELECT * FROM clients WHERE agent_id = ? AND (name LIKE ? OR phone LIKE ?) ORDER BY created_at DESC';
+      query = `SELECT * FROM ${getTable(req, 'clients')} WHERE agent_id = ? AND (name LIKE ? OR phone LIKE ?) ORDER BY created_at DESC`;
       params = [agentId, `%${search}%`, `%${search}%`];
     }
 
@@ -125,8 +151,17 @@ app.put('/api/clients/:id', upload.single('photo'), async (req, res) => {
     const { id } = req.params;
     const { name, phone, page_no, description, principal_amount, interest_rate } = req.body;
     
-    let query = 'UPDATE clients SET name = ?, phone = ?, page_no = ?, description = ?, principal_amount = ?, interest_rate = ?';
-    let params = [name, phone, page_no, description, principal_amount || 0, interest_rate || 0];
+    const isEmi = req.headers['x-system-type'] === 'emi';
+    let query, params;
+
+    if (isEmi) {
+      const { tenure_months } = req.body;
+      query = `UPDATE ${getTable(req, 'clients')} SET name = ?, phone = ?, page_no = ?, description = ?, principal_amount = ?, interest_rate = ?, tenure_months = ?`;
+      params = [name, phone, page_no, description, principal_amount || 0, interest_rate || 0, tenure_months || 1];
+    } else {
+      query = `UPDATE ${getTable(req, 'clients')} SET name = ?, phone = ?, page_no = ?, description = ?, principal_amount = ?, interest_rate = ?`;
+      params = [name, phone, page_no, description, principal_amount || 0, interest_rate || 0];
+    }
 
     if (req.file) {
       query += ', photo = ?';
@@ -138,7 +173,7 @@ app.put('/api/clients/:id', upload.single('photo'), async (req, res) => {
 
     await db.query(query, params);
     
-    const [clients] = await db.query('SELECT * FROM clients WHERE id = ?', [id]);
+    const [clients] = await db.query(`SELECT * FROM ${getTable(req, 'clients')} WHERE id = ?`, [id]);
     res.json(clients[0]);
   } catch (err) {
     console.error(err);
@@ -149,7 +184,7 @@ app.put('/api/clients/:id', upload.single('photo'), async (req, res) => {
 app.delete('/api/clients/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    await db.query('DELETE FROM clients WHERE id = ?', [id]);
+    await db.query(`DELETE FROM ${getTable(req, 'clients')} WHERE id = ?`, [id]);
     res.json({ message: 'Client deleted' });
   } catch (err) {
     console.error(err);
@@ -163,11 +198,11 @@ app.post('/api/entries', async (req, res) => {
     const { client_id, paid_principal, paid_interest, adjustment, payment_method, entry_date } = req.body;
     
     const [result] = await db.query(
-      'INSERT INTO client_entries (client_id, paid_principal, paid_interest, adjustment, payment_method, entry_date) VALUES (?, ?, ?, ?, ?, ?)',
+      `INSERT INTO ${getTable(req, 'client_entries')} (client_id, paid_principal, paid_interest, adjustment, payment_method, entry_date) VALUES (?, ?, ?, ?, ?, ?)`,
       [client_id, paid_principal || 0, paid_interest || 0, adjustment || 0, payment_method, entry_date]
     );
 
-    const [entry] = await db.query('SELECT * FROM client_entries WHERE id = ?', [result.insertId]);
+    const [entry] = await db.query(`SELECT * FROM ${getTable(req, 'client_entries')} WHERE id = ?`, [result.insertId]);
     res.status(201).json(entry[0]);
   } catch (err) {
     console.error(err);
@@ -180,7 +215,7 @@ app.put('/api/entries/:id', async (req, res) => {
     const { id } = req.params;
     const { entry_date, paid_principal, paid_interest, adjustment, payment_method } = req.body;
     await db.query(
-      'UPDATE client_entries SET entry_date = ?, paid_principal = ?, paid_interest = ?, adjustment = ?, payment_method = ? WHERE id = ?',
+      `UPDATE ${getTable(req, 'client_entries')} SET entry_date = ?, paid_principal = ?, paid_interest = ?, adjustment = ?, payment_method = ? WHERE id = ?`,
       [entry_date, paid_principal || 0, paid_interest || 0, adjustment || 0, payment_method, id]
     );
     res.json({ message: 'Entry updated successfully' });
@@ -193,7 +228,7 @@ app.put('/api/entries/:id', async (req, res) => {
 app.delete('/api/entries/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    await db.query('DELETE FROM client_entries WHERE id = ?', [id]);
+    await db.query(`DELETE FROM ${getTable(req, 'client_entries')} WHERE id = ?`, [id]);
     res.json({ message: 'Entry deleted' });
   } catch (err) {
     console.error(err);
@@ -204,7 +239,7 @@ app.delete('/api/entries/:id', async (req, res) => {
 app.get('/api/entries/:clientId', async (req, res) => {
   try {
     const { clientId } = req.params;
-    const [entries] = await db.query('SELECT * FROM client_entries WHERE client_id = ? ORDER BY entry_date DESC, created_at DESC', [clientId]);
+    const [entries] = await db.query(`SELECT * FROM ${getTable(req, 'client_entries')} WHERE client_id = ? ORDER BY entry_date DESC, created_at DESC`, [clientId]);
     res.json(entries);
   } catch (err) {
     console.error(err);
@@ -216,7 +251,7 @@ app.get('/api/entries/summary/:clientId', async (req, res) => {
   try {
     const { clientId } = req.params;
     
-    const [clients] = await db.query('SELECT principal_amount, interest_rate FROM clients WHERE id = ?', [clientId]);
+    const [clients] = await db.query(`SELECT * FROM ${getTable(req, 'clients')} WHERE id = ?`, [clientId]);
     if (clients.length === 0) return res.status(404).json({ error: 'Client not found' });
     const client = clients[0];
     
@@ -225,7 +260,7 @@ app.get('/api/entries/summary/:clientId', async (req, res) => {
         SUM(paid_principal) as total_paid_principal,
         SUM(paid_interest) as total_paid_interest,
         SUM(adjustment) as total_adjustment
-      FROM client_entries WHERE client_id = ?
+      FROM ${getTable(req, 'client_entries')} WHERE client_id = ?
     `, [clientId]);
 
     const stats = sums[0];
@@ -248,7 +283,8 @@ app.get('/api/entries/summary/:clientId', async (req, res) => {
       totalPaidInterest,
       totalAdjustment,
       remainingPrincipal,
-      remainingInterest
+      remainingInterest,
+      tenure_months: client.tenure_months || 0
     });
   } catch (err) {
     console.error(err);
@@ -266,9 +302,9 @@ app.get('/api/profit', async (req, res) => {
         ce.*, 
         c.name as client_name, 
         a.name as agent_name 
-      FROM client_entries ce
-      JOIN clients c ON ce.client_id = c.id
-      JOIN agents a ON c.agent_id = a.id
+      FROM ${getTable(req, 'client_entries')} ce
+      JOIN ${getTable(req, 'clients')} c ON ce.client_id = c.id
+      LEFT JOIN ${getTable(req, 'agents')} a ON c.agent_id = a.id
       WHERE 1=1
     `;
     let params = [];
@@ -309,9 +345,10 @@ app.get('/api/profit', async (req, res) => {
   }
 });
 
-app.get('/api/monthly-profit/:agentId', async (req, res) => {
+app.get('/api/monthly-profit/global', async (req, res) => {
   try {
-    const { agentId } = req.params;
+    const isEmi = req.headers['x-system-type'] === 'emi';
+    const tenureCol = isEmi ? 'c.tenure_months,' : '';
     
     const query = `
       SELECT 
@@ -321,10 +358,45 @@ app.get('/api/monthly-profit/:agentId', async (req, res) => {
         c.created_at as issue_date,
         c.principal_amount,
         c.interest_rate,
+        ${tenureCol}
         MAX(ce.entry_date) as last_entry_date,
-        SUM(ce.paid_interest) as total_paid_interest
-      FROM clients c
-      LEFT JOIN client_entries ce ON c.id = ce.client_id
+        SUM(ce.paid_interest) as total_paid_interest,
+        SUM(ce.paid_principal) as total_paid_principal
+      FROM ${getTable(req, 'clients')} c
+      LEFT JOIN ${getTable(req, 'client_entries')} ce ON c.id = ce.client_id
+      GROUP BY c.id
+      ORDER BY c.created_at DESC
+    `;
+    
+    const [clientsStats] = await db.query(query);
+    res.json(clientsStats);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/monthly-profit/:agentId', async (req, res) => {
+  try {
+    const { agentId } = req.params;
+    
+    const isEmi = req.headers['x-system-type'] === 'emi';
+    const tenureCol = isEmi ? 'c.tenure_months,' : '';
+    
+    const query = `
+      SELECT 
+        c.id as client_id,
+        c.name as client_name,
+        c.page_no,
+        c.created_at as issue_date,
+        c.principal_amount,
+        c.interest_rate,
+        ${tenureCol}
+        MAX(ce.entry_date) as last_entry_date,
+        SUM(ce.paid_interest) as total_paid_interest,
+        SUM(ce.paid_principal) as total_paid_principal
+      FROM ${getTable(req, 'clients')} c
+      LEFT JOIN ${getTable(req, 'client_entries')} ce ON c.id = ce.client_id
       WHERE c.agent_id = ?
       GROUP BY c.id
       ORDER BY c.created_at DESC

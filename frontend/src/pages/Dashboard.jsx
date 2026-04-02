@@ -4,28 +4,49 @@ import '../index.css';
 export default function Dashboard() {
   const navigate = useNavigate();
 
+  const handleLogout = () => {
+    navigate('/');
+  };
+
+  const handleSwitchSystem = () => {
+    navigate('/systems');
+  };
+
   const handleNavigation = (path) => {
     navigate(path);
   };
 
+  const systemType = localStorage.getItem('systemType') || 'monthly';
+  let systemLabel = '📅 Monthly Interest Dashboard';
+  if (systemType === 'gold') systemLabel = '🏆 Gold Loan Dashboard';
+  if (systemType === 'emi') systemLabel = '⏱️ Fixed EMI Dashboard';
+  
+  const isGold = systemType === 'gold';
+  const isEmi = systemType === 'emi';
+
   const navCards = [
-    { title: 'Agents Management', description: 'Manage system agents, view stats, and config.', path: '/agents', icon: '🤖' },
+    ...(isGold 
+      ? [{ title: 'Agents Management', description: 'Manage system agents, view stats, and config.', path: '/agents', icon: '🤖' }] 
+      : [{ title: isEmi ? 'EMI Portfolios' : 'Clients Management', description: 'Manage all direct clients globally.', path: '/clients', icon: '👥' }]),
     { title: 'Profit List', description: 'View latest incoming profit streams and history.', path: '/profit', icon: '📈' },
-    { title: 'Monthly Report', description: 'Analyze your monthly personal finance metrics.', path: '/monthly-report', icon: '📅' }
+    { title: 'Monthly Report', description: 'Analyze agent-wise or global monthly interest.', path: '/monthly-report', icon: '📅' }
   ];
 
   return (
     <div className="container animate-fade-in">
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '2rem', borderBottom: '1px solid var(--panel-border)', marginBottom: '3rem' }}>
         <div>
-          <h1 style={{ fontSize: '2.5rem', marginBottom: '0.5rem', background: 'var(--accent-gradient)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Dashboard</h1>
-          <p style={{ color: 'var(--text-muted)' }}>Welcome to your finance overview</p>
+          <h1 style={{ fontSize: '2.5rem', marginBottom: '0.5rem', background: 'var(--accent-gradient)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>{systemLabel}</h1>
+          <p style={{ color: 'var(--text-muted)' }}>Financial overview and quick actions</p>
         </div>
         
-        {/* Notification Icon */}
-        <div style={{ background: 'var(--panel-bg)', border: '1px solid var(--panel-border)', borderRadius: '50%', width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}>
-          <span style={{ fontSize: '1.2rem' }}>🔔</span>
-          <span style={{ position: 'absolute', top: '12px', right: '14px', width: '8px', height: '8px', background: 'var(--danger)', borderRadius: '50%', boxShadow: '0 0 10px var(--danger)' }}></span>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <button className="btn-secondary" onClick={handleSwitchSystem} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--panel-border)' }}>
+            Switch Module
+          </button>
+          <button className="btn-secondary" onClick={handleLogout} style={{ border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', background: 'rgba(239, 68, 68, 0.05)' }}>
+            Logout
+          </button>
         </div>
       </header>
 

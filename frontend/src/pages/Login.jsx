@@ -11,7 +11,7 @@ export default function Login() {
   const handleLogin = (e) => {
     e.preventDefault();
     if (loginId === 'girirajranga' && password === '9314443208') {
-      navigate('/dashboard');
+      navigate('/systems');
     } else {
       setError('Invalid Login ID or Password');
     }

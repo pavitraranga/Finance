@@ -13,6 +13,9 @@ export default function ClientDetails() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingEntryId, setEditingEntryId] = useState(null);
 
+  const systemType = localStorage.getItem('systemType') || 'monthly';
+  const isEmi = systemType === 'emi';
+
   const [formData, setFormData] = useState({
     paid_principal: '',
     paid_interest: '',
@@ -41,10 +44,8 @@ export default function ClientDetails() {
     setIsSubmitting(true);
     try {
       if (editingEntryId) {
-        // Update existing entry
         await api.put(`/entries/${editingEntryId}`, formData);
       } else {
-        // Create new entry
         await api.post('/entries', {
           client_id: id,
           ...formData
@@ -67,9 +68,9 @@ export default function ClientDetails() {
       paid_interest: entry.paid_interest,
       adjustment: entry.adjustment,
       payment_method: entry.payment_method,
-      entry_date: new Date(entry.entry_date).toISOString().split('T')[0]
+      entry_date: new Date(entry.entry_date).toISOString().split('T')[0],
+      description: entry.description || ''
     });
-    // Scroll to top
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -80,7 +81,8 @@ export default function ClientDetails() {
       paid_interest: '',
       adjustment: '',
       payment_method: 'Cash',
-      entry_date: new Date().toISOString().split('T')[0]
+      entry_date: new Date().toISOString().split('T')[0],
+      description: ''
     });
   };
 
@@ -102,7 +104,6 @@ export default function ClientDetails() {
 
     const wb = XLSX.utils.book_new();
     
-    // Header Info
     const wsData = [
       ['Client Data Export', `Client ID: ${id}`],
       [],
@@ -136,6 +137,79 @@ export default function ClientDetails() {
 
   if (!summary) return <div className="container" style={{ textAlign: 'center', marginTop: '3rem' }}>Loading Financial Data...</div>;
 
+  const emiTotalInt = isEmi && summary ? (summary.principal * summary.interestRate * summary.tenure_months) / 100 : 0;
+  const emiTotalPayable = isEmi && summary ? summary.principal + emiTotalInt : 0;
+  const emiAmount = isEmi && summary && summary.tenure_months > 0 ? emiTotalPayable / summary.tenure_months : 0;
+  const totalPaid = summary ? summary.totalPaidPrincipal + summary.totalPaidInterest : 0;
+  const emiPending = emiTotalPayable - totalPaid;
+
+  const renderEmiSchedule = () => {
+    if (!summary || !isEmi) return null;
+    const months = summary.tenure_months || 1;
+    let accumulatedPaid = totalPaid;
+
+    const schedule = [];
+    for (let i = 1; i <= months; i++) {
+      let status = 'PENDING';
+      let paidForThisRow = 0;
+      
+      if (accumulatedPaid >= emiAmount) {
+        status = 'PAID';
+        paidForThisRow = emiAmount;
+        accumulatedPaid -= emiAmount;
+      } else if (accumulatedPaid > 0) {
+        status = 'PARTIAL';
+        paidForThisRow = accumulatedPaid;
+        accumulatedPaid = 0;
+      }
+
+      schedule.push({
+        month: i,
+        emiExpected: emiAmount,
+        paid: paidForThisRow,
+        status: status
+      });
+    }
+
+    return (
+      <div className="glass-panel" style={{ padding: '0', overflow: 'hidden', marginTop: '2rem' }}>
+        <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--panel-border)' }}>
+          <h3 style={{ fontSize: '1.25rem' }}>EMI Repayment Schedule</h3>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead style={{ background: 'rgba(255,255,255,0.05)' }}>
+              <tr>
+                <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)' }}>Installment Month</th>
+                <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)' }}>Expected EMI</th>
+                <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)' }}>Amount Covered</th>
+                <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)' }}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {schedule.map((row) => (
+                <tr key={row.month} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <td style={{ padding: '1rem 1.5rem' }}>Month {row.month}</td>
+                  <td style={{ padding: '1rem 1.5rem' }}>₹{row.emiExpected.toFixed(2)}</td>
+                  <td style={{ padding: '1rem 1.5rem' }}>₹{row.paid.toFixed(2)}</td>
+                  <td style={{ padding: '1rem 1.5rem' }}>
+                    <span style={{ 
+                      background: row.status === 'PAID' ? 'rgba(16, 185, 129, 0.2)' : row.status === 'PARTIAL' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(239, 68, 68, 0.2)', 
+                      color: row.status === 'PAID' ? '#10b981' : row.status === 'PARTIAL' ? '#f59e0b' : '#ef4444', 
+                      padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: '500' 
+                    }}>
+                      {row.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="container animate-fade-in" style={{ paddingBottom: '5rem' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '2rem', borderBottom: '1px solid var(--panel-border)', marginBottom: '2rem' }}>
@@ -151,24 +225,39 @@ export default function ClientDetails() {
         </button>
       </header>
 
-      {/* Top Summary Section */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
-        <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent-1)' }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Total Principal</p>
-          <h2 style={{ fontSize: '2rem' }}>₹{summary.principal}</h2>
+      {isEmi ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+          <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent-1)' }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Total Loan Amount</p>
+            <h2 style={{ fontSize: '2rem' }}>₹{summary.principal}</h2>
+          </div>
+          <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent-2)' }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Total Payable (with Int.)</p>
+            <h2 style={{ fontSize: '1.5rem' }}>₹{emiTotalPayable.toFixed(2)} <span style={{ color: 'var(--text-muted)', fontSize: '1.25rem', fontWeight: '400' }}>(EMI: ₹{emiAmount.toFixed(2)})</span></h2>
+          </div>
+          <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: `4px solid ${emiPending <= 0 ? '#10b981' : '#ef4444'}` }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Pending Balance</p>
+            <h2 style={{ fontSize: '2rem', color: emiPending <= 0 ? '#10b981' : 'inherit' }}>₹{emiPending.toFixed(2)}</h2>
+          </div>
         </div>
-        <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent-2)' }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Interest Rate & Amount</p>
-          <h2 style={{ fontSize: '1.5rem' }}>{summary.interestRate}% <span style={{ color: 'var(--text-muted)', fontSize: '1.25rem', fontWeight: '400' }}>(₹{summary.calcInterestAmount})</span></h2>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+          <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent-1)' }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Total Principal</p>
+            <h2 style={{ fontSize: '2rem' }}>₹{summary.principal}</h2>
+          </div>
+          <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent-2)' }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Interest Rate & Amount</p>
+            <h2 style={{ fontSize: '1.5rem' }}>{summary.interestRate}% <span style={{ color: 'var(--text-muted)', fontSize: '1.25rem', fontWeight: '400' }}>(₹{summary.calcInterestAmount})</span></h2>
+          </div>
+          <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: `4px solid ${summary.remainingPrincipal <= 0 ? '#10b981' : '#ef4444'}` }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Remaining Principal</p>
+            <h2 style={{ fontSize: '2rem', color: summary.remainingPrincipal <= 0 ? '#10b981' : 'inherit' }}>₹{summary.remainingPrincipal}</h2>
+          </div>
         </div>
-        <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: `4px solid ${summary.remainingPrincipal <= 0 ? '#10b981' : '#ef4444'}` }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Remaining Principal</p>
-          <h2 style={{ fontSize: '2rem', color: summary.remainingPrincipal <= 0 ? '#10b981' : 'inherit' }}>₹{summary.remainingPrincipal}</h2>
-        </div>
-      </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(350px, 1fr) 2fr', gap: '2rem', alignItems: 'start' }}>
-        {/* Entry Form */}
         <div className="glass-panel" style={{ position: 'sticky', top: '2rem' }}>
           <h3 style={{ fontSize: '1.25rem', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--panel-border)' }}>
             {editingEntryId ? 'Edit Transaction' : 'Add New Entry'}
@@ -185,7 +274,7 @@ export default function ClientDetails() {
             </div>
             
             <div className="input-group">
-              <label>Paid Principal (₹)</label>
+              <label>{isEmi ? 'EMI Amount Received (₹)' : 'Paid Principal (₹)'}</label>
               <input 
                 type="number" 
                 step="0.01" 
@@ -195,19 +284,21 @@ export default function ClientDetails() {
               />
             </div>
 
-            <div className="input-group">
-              <label>Paid Interest (₹)</label>
-              <input 
-                type="number" 
-                step="0.01" 
-                value={formData.paid_interest}
-                onChange={(e) => setFormData({...formData, paid_interest: e.target.value})}
-                placeholder="0.00"
-              />
-            </div>
+            {!isEmi && (
+              <div className="input-group">
+                <label>Paid Interest (₹)</label>
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  value={formData.paid_interest}
+                  onChange={(e) => setFormData({...formData, paid_interest: e.target.value})}
+                  placeholder="0.00"
+                />
+              </div>
+            )}
 
             <div className="input-group">
-              <label>Adjustment (₹)</label>
+              <label>{isEmi ? 'Penalty / Late-Fee (₹)' : 'Adjustment (₹)'}</label>
               <input 
                 type="number" 
                 step="0.01" 
@@ -216,6 +307,8 @@ export default function ClientDetails() {
                 placeholder="0.00"
               />
             </div>
+
+
 
             <div className="input-group">
               <label>Payment Method *</label>
@@ -244,7 +337,6 @@ export default function ClientDetails() {
           </form>
         </div>
 
-        {/* Transactions Table */}
         <div className="glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
           <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--panel-border)' }}>
             <h3 style={{ fontSize: '1.25rem' }}>Transaction History</h3>
@@ -255,9 +347,9 @@ export default function ClientDetails() {
               <thead style={{ background: 'rgba(255,255,255,0.05)' }}>
                 <tr>
                   <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Date</th>
-                  <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Principal</th>
-                  <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Interest</th>
-                  <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Adjustment</th>
+                  <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>{isEmi ? 'Amount Paid' : 'Principal'}</th>
+                  {!isEmi && <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Interest</th>}
+                  <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>{isEmi ? 'Penalty' : 'Adjustment'}</th>
                   <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Method</th>
                   <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Actions</th>
                 </tr>
@@ -274,9 +366,11 @@ export default function ClientDetails() {
                       <td style={{ padding: '1rem 1.5rem', color: entry.paid_principal > 0 ? '#10b981' : 'inherit' }}>
                         {entry.paid_principal > 0 ? `+ ₹${entry.paid_principal}` : '-'}
                       </td>
-                      <td style={{ padding: '1rem 1.5rem', color: entry.paid_interest > 0 ? 'var(--accent-1)' : 'inherit' }}>
-                        {entry.paid_interest > 0 ? `+ ₹${entry.paid_interest}` : '-'}
-                      </td>
+                      {!isEmi && (
+                        <td style={{ padding: '1rem 1.5rem', color: entry.paid_interest > 0 ? 'var(--accent-1)' : 'inherit' }}>
+                          {entry.paid_interest > 0 ? `+ ₹${entry.paid_interest}` : '-'}
+                        </td>
+                      )}
                       <td style={{ padding: '1rem 1.5rem', color: entry.adjustment != 0 ? '#f59e0b' : 'inherit' }}>
                         {entry.adjustment != 0 ? `₹${entry.adjustment}` : '-'}
                       </td>
@@ -299,6 +393,7 @@ export default function ClientDetails() {
               </tbody>
             </table>
           </div>
+          {isEmi && renderEmiSchedule()}
         </div>
       </div>
     </div>

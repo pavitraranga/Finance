@@ -18,6 +18,10 @@ export default function ProfitList() {
   });
   const [isLoading, setIsLoading] = useState(false);
 
+  const systemType = localStorage.getItem('systemType') || 'monthly';
+  const isEmi = systemType === 'emi';
+  const isGold = systemType === 'gold';
+
   const fetchProfitData = async () => {
     setIsLoading(true);
     try {
@@ -52,24 +56,47 @@ export default function ProfitList() {
       ['Global Profit Statement', `Filter: ${filterType === 'date' ? `${startDate || 'Start'} to ${endDate || 'End'}` : month || 'All Time'}`],
       [],
       ['Summary'],
-      ['Total Principal Received', summary.total_principal],
-      ['Total Interest Received', summary.total_interest],
-      ['Total Adjustment', summary.total_adjustment],
+      [isEmi ? 'Total EMI Collected' : 'Total Principal Received', summary.total_principal],
+      [!isEmi ? 'Total Interest Received' : '', !isEmi ? summary.total_interest : ''],
+      [isEmi ? 'Total Penalties' : 'Total Adjustment', summary.total_adjustment],
       [],
       ['Transaction Details'],
-      ['Date', 'Client Name', 'Agent Name', 'Paid Principal', 'Paid Interest', 'Adjustment', 'Payment Method']
+      isEmi 
+        ? ['Date', 'Client Name', 'EMI Amount Paid', 'Penalty', 'Payment Method']
+        : (isGold 
+            ? ['Date', 'Client Name', 'Agent Name', 'Paid Principal', 'Paid Interest', 'Adjustment', 'Payment Method']
+            : ['Date', 'Client Name', 'Paid Principal', 'Paid Interest', 'Adjustment', 'Payment Method'])
     ];
 
     transactions.forEach(t => {
-      wsData.push([
-        new Date(t.entry_date).toLocaleDateString(),
-        t.client_name,
-        t.agent_name,
-        Number(t.paid_principal) || 0,
-        Number(t.paid_interest) || 0,
-        Number(t.adjustment) || 0,
-        t.payment_method
-      ]);
+      if (isEmi) {
+        wsData.push([
+          new Date(t.entry_date).toLocaleDateString(),
+          t.client_name,
+          Number(t.paid_principal) || 0,
+          Number(t.adjustment) || 0,
+          t.payment_method
+        ]);
+      } else if (isGold) {
+        wsData.push([
+          new Date(t.entry_date).toLocaleDateString(),
+          t.client_name,
+          t.agent_name,
+          Number(t.paid_principal) || 0,
+          Number(t.paid_interest) || 0,
+          Number(t.adjustment) || 0,
+          t.payment_method
+        ]);
+      } else {
+        wsData.push([
+          new Date(t.entry_date).toLocaleDateString(),
+          t.client_name,
+          Number(t.paid_principal) || 0,
+          Number(t.paid_interest) || 0,
+          Number(t.adjustment) || 0,
+          t.payment_method
+        ]);
+      }
     });
 
     const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -186,15 +213,17 @@ export default function ProfitList() {
       {/* Summary Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
         <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid var(--accent-1)' }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Total Principal Received</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>{isEmi ? 'Total EMI Collected' : 'Total Principal Received'}</p>
           <h2 style={{ fontSize: '2rem' }}>₹{data.summary.total_principal.toFixed(2)}</h2>
         </div>
-        <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid #10b981' }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Total Interest Received</p>
-          <h2 style={{ fontSize: '2rem', color: '#10b981' }}>₹{data.summary.total_interest.toFixed(2)}</h2>
-        </div>
+        {!isEmi && (
+          <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid #10b981' }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Total Interest Received</p>
+            <h2 style={{ fontSize: '2rem', color: '#10b981' }}>₹{data.summary.total_interest.toFixed(2)}</h2>
+          </div>
+        )}
         <div className="glass-panel" style={{ padding: '1.5rem', borderLeft: '4px solid #f59e0b' }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>Total Adjustments</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>{isEmi ? 'Total Penalties' : 'Total Adjustments'}</p>
           <h2 style={{ fontSize: '2rem', color: '#f59e0b' }}>₹{data.summary.total_adjustment.toFixed(2)}</h2>
         </div>
       </div>
@@ -211,30 +240,30 @@ export default function ProfitList() {
               <tr>
                 <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Date</th>
                 <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Client Name</th>
-                <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Agent Name</th>
-                <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Received Principal</th>
-                <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Received Interest</th>
-                <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Adjustment</th>
+                {isGold && <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Agent Name</th>}
+                <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>{isEmi ? 'Amount Paid' : 'Received Principal'}</th>
+                {!isEmi && <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Received Interest</th>}
+                <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>{isEmi ? 'Penalty' : 'Adjustment'}</th>
                 <th style={{ padding: '1rem 1.5rem', color: 'var(--text-muted)', fontWeight: '500', fontSize: '0.875rem' }}>Method</th>
               </tr>
             </thead>
             <tbody>
               {data.transactions.length === 0 ? (
                 <tr>
-                  <td colSpan="7" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No transactions found for the given filter.</td>
+                  <td colSpan={isEmi ? "5" : (isGold ? "7" : "6")} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>No transactions found for the given filter.</td>
                 </tr>
               ) : (
                 data.transactions.map((entry) => (
                   <tr key={entry.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                     <td style={{ padding: '1rem 1.5rem', whiteSpace: 'nowrap' }}>{new Date(entry.entry_date).toLocaleDateString()}</td>
                     <td style={{ padding: '1rem 1.5rem' }}>{entry.client_name}</td>
-                    <td style={{ padding: '1rem 1.5rem' }}>{entry.agent_name}</td>
+                    {isGold && <td style={{ padding: '1rem 1.5rem' }}>{entry.agent_name}</td>}
                     <td style={{ padding: '1rem 1.5rem', color: entry.paid_principal > 0 ? '#10b981' : 'inherit' }}>
                       {entry.paid_principal > 0 ? `+ ₹${entry.paid_principal}` : '-'}
                     </td>
-                    <td style={{ padding: '1rem 1.5rem', color: entry.paid_interest > 0 ? 'var(--accent-1)' : 'inherit' }}>
+                    {!isEmi && <td style={{ padding: '1rem 1.5rem', color: entry.paid_interest > 0 ? 'var(--accent-1)' : 'inherit' }}>
                       {entry.paid_interest > 0 ? `+ ₹${entry.paid_interest}` : '-'}
-                    </td>
+                    </td>}
                     <td style={{ padding: '1rem 1.5rem', color: entry.adjustment != 0 ? '#f59e0b' : 'inherit' }}>
                       {entry.adjustment != 0 ? `₹${entry.adjustment}` : '-'}
                     </td>
